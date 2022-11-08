@@ -113,6 +113,25 @@ func NewNodeConfig(c client.Client, clientset *kubernetes.Clientset, clusterServ
 	additionalAnnotations map[string]string, platformType configv1.PlatformType) (*nodeConfig, error) {
 	var err error
 
+
+	// When the new Node is provisioned via MAPI on Nutanix we need to configure SetNodeIP to have the right Machine IP assigned
+	instanceInfo.SetNodeIP = platformType == configv1.NutanixPlatformType
+
+	if nodeConfigCache.workerIgnitionEndPoint == "" {
+		var kubeAPIServerEndpoint string
+		// We couldn't find it in cache. Let's compute it now.
+		kubeAPIServerEndpoint, err = discoverKubeAPIServerEndpoint()
+		if err != nil {
+			return nil, errors.Wrap(err, "unable to find kube api server endpoint")
+		}
+		clusterAddress, err := getClusterAddr(kubeAPIServerEndpoint)
+		if err != nil {
+			return nil, errors.Wrap(err, "error getting cluster address")
+		}
+		workerIgnitionEndpoint := "https://" + clusterAddress + ":22623/config/worker"
+		nodeConfigCache.workerIgnitionEndPoint = workerIgnitionEndpoint
+	}
+
 	if err = cluster.ValidateCIDR(clusterServiceCIDR); err != nil {
 		return nil, errors.Wrap(err, "error receiving valid CIDR value for "+
 			"creating new node config")
